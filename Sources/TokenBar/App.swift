@@ -15,13 +15,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var providers: [Provider] = []
-    private var controllers: [ProviderController] = []
+    private var sessions: [ProviderSession] = []
+    private var menuBar: MenuBarController!
     private var refreshService: RefreshService!
     private var settingsWindow: SettingsWindowController!
     private var loginWindow: LoginWindowController!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         providers = ProviderRegistry.makeAll()
+        sessions = providers.map { ProviderSession(provider: $0) }
+        sessions.forEach { session in
+            session.onChange = { [weak self] in self?.menuBar?.render() }
+        }
 
         refreshService = RefreshService { [weak self] in self?.refreshAll() }
 
@@ -36,11 +41,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsWindow = SettingsWindowController(
             refreshService: refreshService,
             providers: providers,
-            onVisibilityChanged: { [weak self] in self?.rebuildControllers() }
+            onVisibilityChanged: { [weak self] in self?.applyVisibility() }
         )
 
         wireProviderCallbacks()
-        rebuildControllers()
+
+        menuBar = MenuBarController(
+            sessions: visibleSessions(),
+            refreshAll: { [weak self] in self?.refreshAll() },
+            openSettings: { [weak self] in self?.settingsWindow.show() },
+            signIn: { [weak self] _ in self?.loginWindow.show() }
+        )
 
         refreshService.start()
         refreshAll()
@@ -60,20 +71,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Rebuilds the status items to match the current visibility settings.
-    private func rebuildControllers() {
-        controllers.forEach { $0.tearDown() }
-        controllers = providers.filter(\.isVisible).map { provider in
-            ProviderController(
-                provider: provider,
-                openSettings: { [weak self] in self?.settingsWindow.show() },
-                signIn: { [weak self] _ in self?.loginWindow.show() }
-            )
-        }
+    private func visibleSessions() -> [ProviderSession] {
+        sessions.filter { $0.provider.isVisible }
+    }
+
+    /// A hidden provider drops out of the shared title and menu, and stops being
+    /// polled — nothing is torn down, so unhiding it costs one refresh.
+    private func applyVisibility() {
+        sessions.filter { !$0.provider.isVisible }.forEach { $0.cancel() }
+        menuBar.setSessions(visibleSessions())
         refreshAll()
     }
 
     private func refreshAll() {
-        controllers.forEach { $0.refresh() }
+        visibleSessions().forEach { $0.refresh() }
     }
 }

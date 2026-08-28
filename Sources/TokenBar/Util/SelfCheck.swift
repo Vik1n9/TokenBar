@@ -35,6 +35,7 @@ enum SelfCheck {
         checkPeakSchedule()
         checkLedger()
         checkPricing()
+        checkMenuBarTitle()
         checkFormatters()
 
         print("")
@@ -276,6 +277,25 @@ enum SelfCheck {
                "\(Pricing.rate(model: "deepseek-v4-flash-vision-exp", kind: .cacheHit, band: .peak) ?? -1)", "0.014")
         // An unknown model yields no estimate rather than a wrong one.
         expect("unknown model", Pricing.rate(model: "gpt-9", kind: .output, band: .peak).map { "\($0)" } ?? "nil", "nil")
+    }
+
+    // MARK: - Menu bar title
+
+    private static func checkMenuBarTitle() {
+        print("Menu bar title")
+        let qwen = MenuBarSegment(glyph: "Q", text: "42% · 2d", severity: .normal)
+        let deepseek = MenuBarSegment(glyph: "D", text: "¥110.00", severity: .normal)
+        expect("one segment", MenuBarController.compose([qwen]), "Q 42% · 2d")
+        // Providers share one status item; the gap has to separate them without
+        // colliding with the `·` a provider already uses inside its own text.
+        expect("two segments", MenuBarController.compose([qwen, deepseek]), "Q 42% · 2d  D ¥110.00")
+        expect("placeholder states",
+               MenuBarController.compose([
+                   MenuBarSegment(glyph: "Q", text: "—", severity: .normal),
+                   MenuBarSegment(glyph: "D", text: "⚠", severity: .stale)
+               ]),
+               "Q —  D ⚠")
+        expect("empty", MenuBarController.compose([]), "")
     }
 
     // MARK: - Formatters

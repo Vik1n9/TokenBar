@@ -8,15 +8,18 @@
 A small macOS menu bar app that shows how much allowance or credit each of your
 AI API accounts has left, without opening a console in a browser.
 
-One menu bar item per account, each prefixed with a letter:
+One menu bar item for everything, one letter-prefixed segment per account:
 
 ```
-Q 42% · 2d          D ¥110.00
+Q 42% · 2d  D ¥110.00
 ```
 
 That reads: 42% of the QwenCloud 7-day allowance left, resetting in 2 days; and
-¥110.00 of DeepSeek API credit remaining. Numbers turn red when an account is
-running low.
+¥110.00 of DeepSeek API credit remaining. A segment turns red when that account
+is running low, and grey with a `⚠` when its last refresh failed.
+
+The drop-down groups the detail under one heading per account, with that
+account's own actions beneath it.
 
 ## Supported accounts
 
@@ -76,7 +79,7 @@ unaffected; run either, or both.
 Open **Settings…** from any menu bar item.
 
 - **General** — refresh interval, launch at login, and which accounts appear in
-  the menu bar.
+  the menu bar. Hiding an account drops it from the title and stops polling it.
 - **QwenCloud Token Plan** — sign in once through the console window.
 - **DeepSeek API** — paste an API key and press **Validate & Save**. The key is
   checked against the balance endpoint before it is stored. Optionally set a
