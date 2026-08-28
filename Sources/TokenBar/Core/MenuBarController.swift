@@ -29,7 +29,7 @@ struct MenuBarSegment: Equatable {
 @MainActor
 final class MenuBarController: NSObject, NSMenuDelegate {
     /// How long each provider holds the menu bar before the next one takes over.
-    static let rotationInterval: TimeInterval = 60
+    nonisolated static let rotationInterval: TimeInterval = 60
 
     private let statusItem: NSStatusItem
     private var sessions: [ProviderSession]

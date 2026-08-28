@@ -11,9 +11,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build release binary
-        run: swift build -c release
+        run: swift build -c release --arch arm64 --arch x86_64
       - name: Run self-check
-        run: "$(swift build -c release --show-bin-path)/TokenBar --self-check"
+        run: "$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)/TokenBar --self-check"
       - name: Package app bundle
         run: ./scripts/package-release.sh
       - uses: actions/upload-artifact@v4
