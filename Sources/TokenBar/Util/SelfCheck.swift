@@ -36,6 +36,8 @@ enum SelfCheck {
         checkLedger()
         checkPricing()
         checkMenuBarTitle()
+        checkMenuRows()
+        checkVersions()
         checkFormatters()
 
         print("")
@@ -304,6 +306,78 @@ enum SelfCheck {
         expect("stale index of 2", "\(MenuBarController.nextIndex(current: 5, count: 2))", "0")
         expect("empty list", "\(MenuBarController.nextIndex(current: 3, count: 0))", "0")
         expect("interval is one minute", "\(Int(MenuBarController.rotationInterval))", "60")
+    }
+
+    // MARK: - Menu rows
+
+    /// The drop-down is deliberately short: what is left, and when it changes.
+    /// These pin that shape so a future row does not creep back in unnoticed.
+    private static func checkMenuRows() {
+        print("Menu rows")
+        let now = Date(timeIntervalSince1970: 1_788_000_000)
+
+        guard let bridge = try? JSONDecoder().decode(BridgeResult.self, from: Data(qwenPayload.utf8)) else {
+            print("  FAIL qwen payload did not decode")
+            failures.append("qwen rows decode")
+            return
+        }
+        let qwenRows = QwenProvider.rows(PlanSnapshot(bridge: bridge, fetchedAt: now), now: now)
+        expect("qwen row count", "\(qwenRows.count)", "2")
+        expect("qwen remaining row", qwenRows.first ?? "nil", "Left: 0%")
+        expect("qwen reset row", qwenRows.last ?? "nil", "Resets in 3d")
+
+        guard let balance = try? JSONDecoder().decode(BalanceResponse.self, from: Data(balancePayload.utf8)) else {
+            print("  FAIL balance payload did not decode")
+            failures.append("deepseek rows decode")
+            return
+        }
+        // 1_788_000_000 is Saturday 2026-08-29 10:40 UTC: off-peak, with peak
+        // returning at Monday 01:00 UTC, 38 hours out.
+        let deepSeekRows = DeepSeekProvider.rows(balance: balance, preferredCurrency: nil, now: now)
+        expect("deepseek row count", "\(deepSeekRows.count)", "2")
+        expect("deepseek balance row", deepSeekRows.first ?? "nil", "Balance: ¥110.00")
+        expect("deepseek band row", deepSeekRows.last ?? "nil", "Off-peak (50% off) · peak in 1d")
+
+        let unavailable = """
+        {"is_available":false,"balance_infos":[
+          {"currency":"USD","total_balance":"1.50","granted_balance":"0.00","topped_up_balance":"1.50"},
+          {"currency":"CNY","total_balance":"70.16","granted_balance":"0.00","topped_up_balance":"70.16"}]}
+        """
+        guard let dual = try? JSONDecoder().decode(BalanceResponse.self, from: Data(unavailable.utf8)) else {
+            print("  FAIL dual payload did not decode")
+            failures.append("deepseek dual rows decode")
+            return
+        }
+        // Money the account holds is never hidden, nor is a wallet that cannot
+        // serve calls — those are not the routine rows the menu trimmed.
+        let dualRows = DeepSeekProvider.rows(balance: dual, preferredCurrency: "USD", now: now)
+        expect("dual row count", "\(dualRows.count)", "4")
+        expect("dual primary", dualRows[0], "Balance: $1.50")
+        expect("dual second wallet", dualRows[1], "Also: ¥70.16")
+        expect("dual unavailable", dualRows[2], "Account cannot serve API calls")
+    }
+
+    // MARK: - Update versions
+
+    private static func checkVersions() {
+        print("Version comparison")
+        func newer(_ latest: String, _ current: String) -> String {
+            "\(AppVersion.isNewer(latest, than: current))"
+        }
+        expect("patch bump", newer("1.0.1", "1.0.0"), "true")
+        expect("minor bump with v prefix", newer("v1.1.0", "1.0.9"), "true")
+        // String comparison would put 1.9.0 above 1.10.0; numbers must win.
+        expect("double-digit minor", newer("1.10.0", "1.9.0"), "true")
+        expect("same version", newer("1.0.0", "1.0.0"), "false")
+        expect("older release", newer("0.9.0", "1.0.0"), "false")
+        expect("missing component", newer("1.2", "1.2.0"), "false")
+        expect("missing component is older", newer("1.2", "1.2.1"), "false")
+        // A pre-release of the version already installed is not an update.
+        expect("pre-release suffix", newer("1.0.0-beta.1", "1.0.0"), "false")
+        expect("pre-release of a newer version", newer("1.1.0-beta.1", "1.0.0"), "true")
+        // Anything unparsable must never prompt.
+        expect("junk tag", newer("nightly", "1.0.0"), "false")
+        expect("empty tag", newer("", "1.0.0"), "false")
     }
 
     // MARK: - Formatters
