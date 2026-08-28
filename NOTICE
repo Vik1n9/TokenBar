@@ -1,0 +1,58 @@
+TokenBar
+Copyright (c) 2026 Vik1n9
+
+This product is an independent, unofficial tool. It is NOT affiliated with,
+authorized by, endorsed by, sponsored by, or supported by any of the services
+it reads from, or any of their subsidiaries or affiliates.
+
+TokenBar reads account data from third-party services on the user's own behalf,
+using credentials the user supplies. The names below are used solely to identify
+those third-party services. No ownership of, or right to, any of those marks is
+claimed, and no affiliation or endorsement is implied.
+
+  * "Qwen", "QwenCloud", "Alibaba Cloud", "Aliyun" and "Bailian" are trademarks
+    or registered trademarks of Alibaba Group Holding Limited and/or its
+    affiliates.
+
+  * "DeepSeek" is a trademark or registered trademark of Hangzhou DeepSeek
+    Artificial Intelligence Co., Ltd. and/or its affiliates.
+
+The MIT license accompanying this software covers this project's own source code
+only. It grants no rights to any third-party trademark, service, API, or content.
+
+
+--------------------------------------------------------------------------------
+THIRD-PARTY SOURCE ATTRIBUTION
+--------------------------------------------------------------------------------
+
+Portions of the DeepSeek balance handling in this project were modelled on two
+MIT-licensed projects. No code was copied verbatim; the normalization rules and
+response shapes were reimplemented in Swift.
+
+  * DeepSeek-Reasonix — https://github.com/esengine/DeepSeek-Reasonix
+    Referenced: internal/billing/balance.go (currency normalization, symbol
+    selection, "never convert or cross-add wallet currencies" rule).
+
+  * DeepSeekMonitor — https://github.com/JayHome137/DeepSeekMonitor
+    Referenced: the existence and request shape of GET /v1/usage, and the
+    read-back-after-write Keychain storage pattern.
+
+Both are distributed under the MIT License:
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in
+    all copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+    FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+    IN THE SOFTWARE.
