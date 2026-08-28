@@ -18,20 +18,25 @@ struct MenuBarSegment: Equatable {
     var rendered: String { "\(glyph) \(text)" }
 }
 
-/// The app's single menu bar item. Every provider shares it: one glyph-prefixed
-/// segment each in the title, one section each in the drop-down.
+/// The app's single menu bar item. It shows one provider at a time and rotates
+/// through them; the drop-down always shows every provider at once.
 ///
-/// A status item per provider would eat menu bar width that other apps need, and
-/// would scatter one app's readings across several unrelated buttons.
+/// A status item per provider would eat menu bar width that other apps need.
+/// Showing every provider side by side in one title costs almost as much width,
+/// and it grows with each provider added. Rotating keeps the footprint fixed at
+/// one reading no matter how many accounts are configured, and the full picture
+/// is one click away.
 @MainActor
 final class MenuBarController: NSObject, NSMenuDelegate {
-    /// Two spaces between segments: wide enough to group each glyph with its own
-    /// number, without adding a separator glyph that competes with the `·` some
-    /// providers already use inside their own text.
-    static let segmentGap = "  "
+    /// How long each provider holds the menu bar before the next one takes over.
+    static let rotationInterval: TimeInterval = 60
 
     private let statusItem: NSStatusItem
     private var sessions: [ProviderSession]
+
+    /// Which session the title is currently showing.
+    private var rotationIndex = 0
+    private var rotationTimer: Timer?
 
     private let refreshAll: () -> Void
     private let openSettings: () -> Void
@@ -52,42 +57,64 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.delegate = self
         statusItem.menu = menu
         render()
+        startRotation()
     }
 
     /// Swaps in a new set of visible providers, e.g. after a Settings change.
     func setSessions(_ sessions: [ProviderSession]) {
         self.sessions = sessions
+        // The provider that was on screen may be gone, or may have moved.
+        rotationIndex = min(rotationIndex, max(sessions.count - 1, 0))
         render()
+        startRotation()
     }
 
     func tearDown() {
+        rotationTimer?.invalidate()
+        rotationTimer = nil
         NSStatusBar.system.removeStatusItem(statusItem)
+    }
+
+    // MARK: - Rotation
+
+    /// Advances the carousel, wrapping around. Returns 0 for an empty list so
+    /// the index is always safe to subscript against a non-empty one.
+    nonisolated static func nextIndex(current: Int, count: Int) -> Int {
+        guard count > 0 else { return 0 }
+        return (current + 1) % count
+    }
+
+    /// One timer, only while there is more than one provider to show. A single
+    /// provider has nothing to rotate to, so it holds the title indefinitely.
+    private func startRotation() {
+        rotationTimer?.invalidate()
+        rotationTimer = nil
+        guard sessions.count > 1 else { return }
+
+        let timer = Timer(timeInterval: Self.rotationInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.advance() }
+        }
+        // The carousel is ambient: let the system coalesce it with other timers.
+        timer.tolerance = Self.rotationInterval * 0.2
+        RunLoop.main.add(timer, forMode: .common)
+        rotationTimer = timer
+    }
+
+    private func advance() {
+        rotationIndex = Self.nextIndex(current: rotationIndex, count: sessions.count)
+        render()
     }
 
     // MARK: - Title
 
-    /// Plain text of the whole title. Separate from the attributed build so the
-    /// composition rule can be checked without AppKit.
-    nonisolated static func compose(_ segments: [MenuBarSegment]) -> String {
-        segments.map(\.rendered).joined(separator: segmentGap)
-    }
-
     func render() {
         guard let button = statusItem.button else { return }
-        let segments = sessions.map(\.segment)
-        guard !segments.isEmpty else {
+        guard sessions.indices.contains(rotationIndex) else {
             button.attributedTitle = attributed("TokenBar", color: .labelColor)
             return
         }
-
-        let title = NSMutableAttributedString()
-        for (index, segment) in segments.enumerated() {
-            if index > 0 {
-                title.append(attributed(Self.segmentGap, color: .labelColor))
-            }
-            title.append(attributed(segment.rendered, color: color(for: segment.severity)))
-        }
-        button.attributedTitle = title
+        let segment = sessions[rotationIndex].segment
+        button.attributedTitle = attributed(segment.rendered, color: color(for: segment.severity))
     }
 
     private func color(for severity: SegmentTint) -> NSColor {
@@ -106,6 +133,18 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     }
 
     // MARK: - Menu
+
+    /// The title must not change out from under someone reading the menu, so the
+    /// carousel holds still while it is open and resumes from a full interval
+    /// afterwards.
+    func menuWillOpen(_ menu: NSMenu) {
+        rotationTimer?.invalidate()
+        rotationTimer = nil
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        startRotation()
+    }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()

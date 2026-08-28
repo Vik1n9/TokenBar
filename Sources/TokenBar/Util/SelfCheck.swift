@@ -283,19 +283,27 @@ enum SelfCheck {
 
     private static func checkMenuBarTitle() {
         print("Menu bar title")
-        let qwen = MenuBarSegment(glyph: "Q", text: "42% · 2d", severity: .normal)
-        let deepseek = MenuBarSegment(glyph: "D", text: "¥110.00", severity: .normal)
-        expect("one segment", MenuBarController.compose([qwen]), "Q 42% · 2d")
-        // Providers share one status item; the gap has to separate them without
-        // colliding with the `·` a provider already uses inside its own text.
-        expect("two segments", MenuBarController.compose([qwen, deepseek]), "Q 42% · 2d  D ¥110.00")
-        expect("placeholder states",
-               MenuBarController.compose([
-                   MenuBarSegment(glyph: "Q", text: "—", severity: .normal),
-                   MenuBarSegment(glyph: "D", text: "⚠", severity: .stale)
-               ]),
-               "Q —  D ⚠")
-        expect("empty", MenuBarController.compose([]), "")
+        expect("segment rendering",
+               MenuBarSegment(glyph: "Q", text: "42% · 2d", severity: .normal).rendered,
+               "Q 42% · 2d")
+        expect("balance segment",
+               MenuBarSegment(glyph: "D", text: "¥110.00", severity: .normal).rendered,
+               "D ¥110.00")
+        expect("placeholder segment",
+               MenuBarSegment(glyph: "D", text: "⚠", severity: .stale).rendered,
+               "D ⚠")
+
+        print("Menu bar rotation")
+        // Two providers alternate; the index must wrap, never run off the end.
+        expect("0 -> 1 of 2", "\(MenuBarController.nextIndex(current: 0, count: 2))", "1")
+        expect("1 wraps to 0", "\(MenuBarController.nextIndex(current: 1, count: 2))", "0")
+        expect("2 wraps to 0 of 3", "\(MenuBarController.nextIndex(current: 2, count: 3))", "0")
+        // A single provider holds the title: advancing must stay put.
+        expect("single provider stays", "\(MenuBarController.nextIndex(current: 0, count: 1))", "0")
+        // A stale index from a provider that was just hidden must not crash.
+        expect("stale index of 2", "\(MenuBarController.nextIndex(current: 5, count: 2))", "0")
+        expect("empty list", "\(MenuBarController.nextIndex(current: 3, count: 0))", "0")
+        expect("interval is one minute", "\(Int(MenuBarController.rotationInterval))", "60")
     }
 
     // MARK: - Formatters
