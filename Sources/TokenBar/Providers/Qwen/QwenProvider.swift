@@ -31,7 +31,7 @@ final class QwenProvider: Provider {
         let plan = PlanSnapshot(bridge: result)
         return ProviderSnapshot(barText: barText(plan),
                                 severity: (plan.remainingPercent ?? 100) < 10 ? .warning : .normal,
-                                rows: rows(plan),
+                                rows: Self.rows(plan, now: plan.fetchedAt),
                                 fetchedAt: plan.fetchedAt)
     }
 
@@ -69,24 +69,14 @@ final class QwenProvider: Provider {
         return text
     }
 
-    private func rows(_ plan: PlanSnapshot) -> [String] {
+    /// The drop-down answers two questions: how much is left, and when it comes
+    /// back. Plan tier, expiry and auto-renew are static account trivia that
+    /// only made the menu harder to scan, so they are no longer shown.
+    nonisolated static func rows(_ plan: PlanSnapshot, now: Date = Date()) -> [String] {
         var rows: [String] = []
-        if let remaining = plan.remainingPercent {
-            rows.append("7-day allowance left: \(Formatters.percent(remaining))")
-        }
+        rows.append("Left: " + (plan.remainingPercent.map { Formatters.percent($0) } ?? "unknown"))
         if let reset = plan.resetTime {
-            rows.append("Resets \(Formatters.dateTime.string(from: reset)) (in \(Formatters.countdown(to: reset)))")
-        }
-        if let spec = plan.specCode {
-            let status = plan.status.map { " · \($0)" } ?? ""
-            rows.append("Plan: \(spec)\(status)")
-        }
-        if let end = plan.endTime {
-            let days = plan.remainingDays.map { " (\($0) days left)" } ?? ""
-            rows.append("Expires \(Formatters.dateOnly.string(from: end))\(days)")
-        }
-        if let renew = plan.autoRenew {
-            rows.append("Auto-renew: \(renew ? "on" : "off")")
+            rows.append("Resets in \(Formatters.countdown(to: reset, from: now))")
         }
         return rows
     }

@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var sessions: [ProviderSession] = []
     private var menuBar: MenuBarController!
     private var refreshService: RefreshService!
+    private var updateChecker: UpdateChecker!
     private var settingsWindow: SettingsWindowController!
     private var loginWindow: LoginWindowController!
 
@@ -29,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         refreshService = RefreshService { [weak self] in self?.refreshAll() }
+        updateChecker = UpdateChecker()
 
         loginWindow = LoginWindowController { [weak self] in
             guard let self else { return }
@@ -40,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         settingsWindow = SettingsWindowController(
             refreshService: refreshService,
+            updateChecker: updateChecker,
             providers: providers,
             onVisibilityChanged: { [weak self] in self?.applyVisibility() }
         )
@@ -53,7 +56,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             signIn: { [weak self] _ in self?.loginWindow.show() }
         )
 
+        // The menu is rebuilt each time it opens, so handing the controller the
+        // current answer is all the update banner needs.
+        updateChecker.onChange = { [weak self] in
+            guard let self else { return }
+            self.menuBar.pendingUpdate = self.updateChecker.available
+            self.settingsWindow.updateStatusChanged()
+        }
+        menuBar.pendingUpdate = updateChecker.available
+
         refreshService.start()
+        updateChecker.start()
         refreshAll()
     }
 

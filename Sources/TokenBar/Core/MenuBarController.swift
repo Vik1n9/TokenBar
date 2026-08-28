@@ -42,6 +42,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private let openSettings: () -> Void
     private let signIn: (Provider) -> Void
 
+    /// Set by the shell when a newer release exists. The menu offers it; it is
+    /// never acted on without a click.
+    var pendingUpdate: UpdateInfo?
+
     init(sessions: [ProviderSession],
          refreshAll: @escaping () -> Void,
          openSettings: @escaping () -> Void,
@@ -55,6 +59,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
         let menu = NSMenu()
         menu.delegate = self
+        // Rows are informational and therefore disabled, which AppKit would
+        // normally draw dimmed. Owning the enabled state here lets the row
+        // builders below set their own colours instead.
+        menu.autoenablesItems = false
         statusItem.menu = menu
         render()
         startRotation()
@@ -155,6 +163,15 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         }
 
         menu.addItem(.separator())
+        if let update = pendingUpdate {
+            let item = action("Update available: \(update.version)…", #selector(updateTapped))
+            item.attributedTitle = NSAttributedString(string: item.title, attributes: [
+                .font: NSFont.menuFont(ofSize: 0),
+                .foregroundColor: NSColor.controlAccentColor
+            ])
+            menu.addItem(item)
+            menu.addItem(.separator())
+        }
         menu.addItem(action("Refresh Now", #selector(refreshTapped)))
         menu.addItem(action("Settings…", #selector(settingsTapped)))
         menu.addItem(action("Quit TokenBar", #selector(quitTapped), key: "q"))
@@ -178,13 +195,12 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             menu.addItem(info("Last refresh failed: \(message)"))
             if let snapshot = session.store.snapshot {
                 snapshot.rows.forEach { menu.addItem(info($0)) }
+                // Only worth the line when the numbers above are known to be
+                // stale: it says how old they are.
                 menu.addItem(info("Updated \(Formatters.clock.string(from: snapshot.fetchedAt))"))
             }
         case .ok:
-            if let snapshot = session.store.snapshot {
-                snapshot.rows.forEach { menu.addItem(info($0)) }
-                menu.addItem(info("Updated \(Formatters.clock.string(from: snapshot.fetchedAt))"))
-            }
+            session.store.snapshot?.rows.forEach { menu.addItem(info($0)) }
         }
 
         // Per-provider actions sit inside the provider's own section, indented
@@ -210,15 +226,24 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         let item = NSMenuItem(title: text, action: nil, keyEquivalent: "")
         item.isEnabled = false
         item.attributedTitle = NSAttributedString(string: text, attributes: [
-            .font: NSFont.boldSystemFont(ofSize: NSFont.smallSystemFontSize)
+            .font: NSFont.boldSystemFont(ofSize: NSFont.smallSystemFontSize),
+            .foregroundColor: NSColor.secondaryLabelColor
         ])
         return item
     }
 
+    /// A read-only detail line. Disabled menu items are drawn washed out by
+    /// default, which left the whole drop-down barely legible; an explicit
+    /// colour on the attributed title keeps these rows at normal contrast while
+    /// they stay unclickable.
     private func info(_ text: String) -> NSMenuItem {
         let item = NSMenuItem(title: text, action: nil, keyEquivalent: "")
         item.isEnabled = false
         item.indentationLevel = 1
+        item.attributedTitle = NSAttributedString(string: text, attributes: [
+            .font: NSFont.menuFont(ofSize: 0),
+            .foregroundColor: NSColor.labelColor
+        ])
         return item
     }
 
@@ -231,6 +256,11 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     @objc private func refreshTapped() { refreshAll() }
     @objc private func settingsTapped() { openSettings() }
     @objc private func quitTapped() { NSApp.terminate(nil) }
+
+    /// Opens the release page. Downloading and installing stays the user's call.
+    @objc private func updateTapped() {
+        NSWorkspace.shared.open(pendingUpdate?.url ?? UpdateChecker.releasesPage)
+    }
 
     @objc private func signInTapped(_ sender: NSMenuItem) {
         guard let session = sender.representedObject as? ProviderSession else { return }

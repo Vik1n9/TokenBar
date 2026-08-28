@@ -96,7 +96,7 @@ final class DeepSeekProvider: Provider {
 
         return ProviderSnapshot(barText: barText(balance: balance, wallet: wallet, currency: currency, usage: usage),
                                 severity: severity(balance: balance, wallet: wallet),
-                                rows: rows(balance: balance, wallet: wallet, currency: currency, usage: usage, now: now),
+                                rows: Self.rows(balance: balance, preferredCurrency: preferredCurrency, now: now),
                                 fetchedAt: now)
     }
 
@@ -188,19 +188,24 @@ final class DeepSeekProvider: Provider {
         return sawCost ? total : nil
     }
 
-    private func rows(balance: BalanceResponse,
-                      wallet: BalanceInfo,
-                      currency: String,
-                      usage: UsageResponse?,
-                      now: Date) -> [String] {
-        var rows: [String] = []
+    /// The drop-down answers two questions: how much credit is left, and which
+    /// rate band is running. Spend history, runway and token counts are all
+    /// estimates that made the menu long and hard to read; they are dropped.
+    /// Rows that are not routine — a wallet that cannot serve calls, a second
+    /// currency — still appear, because hiding those would hide real money.
+    nonisolated static func rows(balance: BalanceResponse, preferredCurrency: String?, now: Date = Date()) -> [String] {
+        var rows: [String] = ["Balance: \(balance.display(preferring: preferredCurrency))"]
 
-        rows.append("Balance: \(balance.display(preferring: preferredCurrency))")
-        rows.append("  granted \(Money.format(wallet.granted, currency: currency)) · topped up \(Money.format(wallet.toppedUp, currency: currency))")
-
-        if balance.isMultiCurrency {
-            // Wallets are shown side by side; they are never summed.
-            for info in balance.balanceInfos where Money.normalize(info.currency) != Money.normalize(currency) {
+        if let wallet = balance.preferred(preferredCurrency), balance.isMultiCurrency {
+            // Wallets are shown side by side; they are never summed. An
+            // unrecognized code falls back to itself, so two unknown currencies
+            // do not collapse into one row.
+            func code(_ currency: String) -> String {
+                let iso = Money.normalize(currency)
+                return iso.isEmpty ? currency.uppercased() : iso
+            }
+            let shown = code(wallet.currency)
+            for info in balance.balanceInfos where code(info.currency) != shown {
                 rows.append("Also: \(Money.format(info.total, currency: info.currency))")
             }
         }
@@ -209,35 +214,7 @@ final class DeepSeekProvider: Provider {
             rows.append("Account cannot serve API calls")
         }
 
-        let source = usage == nil ? "estimated from balance changes" : "reported by the usage endpoint"
-        rows.append("—")
-        rows.append("Today: \(Money.format(spendToday(currency: currency, usage: usage), currency: currency))")
-        rows.append("This month: \(Money.format(monthSpend(currency: currency, usage: usage), currency: currency))")
-        rows.append("Last 7 days: \(Money.format(ledger.spendLast(days: 7, currency: currency, now: now), currency: currency))")
-        rows.append("Spend \(source)")
-
-        if let days = ledger.daysRemaining(balance: wallet.total, currency: currency, now: now) {
-            rows.append("About \(days) days left at the recent rate")
-        } else if !ledger.hasHistory {
-            rows.append("Collecting history — spend appears after a few refreshes")
-        }
-
-        if let tokens = usage?.totalTokens, tokens > 0 {
-            rows.append("Tokens this month: \(tokens)")
-        }
-
-        rows.append("—")
         rows.append(PeakSchedule.summary(at: now))
-
         return rows
-    }
-
-    private func monthSpend(currency: String, usage: UsageResponse?) -> Decimal {
-        if let usage {
-            let totals = usage.costTotals
-            let key = Money.normalize(currency).isEmpty ? currency.uppercased() : Money.normalize(currency)
-            if let reported = totals[key], reported > 0 { return reported }
-        }
-        return ledger.spendThisMonth(currency: currency)
     }
 }
