@@ -72,11 +72,18 @@ final class QwenProvider: Provider {
     /// The drop-down answers two questions: how much is left, and when it comes
     /// back. Plan tier, expiry and auto-renew are static account trivia that
     /// only made the menu harder to scan, so they are no longer shown.
-    nonisolated static func rows(_ plan: PlanSnapshot, now: Date = Date()) -> [String] {
-        var rows: [String] = []
-        rows.append("Left: " + (plan.remainingPercent.map { Formatters.percent($0) } ?? "unknown"))
+    nonisolated static func rows(_ plan: PlanSnapshot, now: Date = Date()) -> [MenuRow] {
+        var rows: [MenuRow] = []
+        if let remaining = plan.remainingPercent {
+            rows.append(.metric("7-day allowance",
+                                Formatters.percent(remaining) + " left",
+                                fraction: remaining / 100,
+                                isWarning: remaining < 10))
+        } else {
+            rows.append(.metric("7-day allowance", "unknown"))
+        }
         if let reset = plan.resetTime {
-            rows.append("Resets in \(Formatters.countdown(to: reset, from: now))")
+            rows.append(.caption("Resets in \(Formatters.countdown(to: reset, from: now))"))
         }
         return rows
     }

@@ -81,7 +81,10 @@ final class DeepSeekProvider: Provider {
         ledger.record(balance, at: now)
 
         guard let wallet = balance.preferred(preferredCurrency) else {
-            return ProviderSnapshot(barText: "—", severity: .warning, rows: ["Account has no wallet"], fetchedAt: now)
+            return ProviderSnapshot(barText: "—",
+                                    severity: .warning,
+                                    rows: [.notice("Account has no wallet")],
+                                    fetchedAt: now)
         }
         let currency = Money.normalize(wallet.currency).isEmpty
             ? wallet.currency.uppercased()
@@ -96,7 +99,10 @@ final class DeepSeekProvider: Provider {
 
         return ProviderSnapshot(barText: barText(balance: balance, wallet: wallet, currency: currency, usage: usage),
                                 severity: severity(balance: balance, wallet: wallet),
-                                rows: Self.rows(balance: balance, preferredCurrency: preferredCurrency, now: now),
+                                rows: Self.rows(balance: balance,
+                                                preferredCurrency: preferredCurrency,
+                                                threshold: lowBalanceThreshold,
+                                                now: now),
                                 fetchedAt: now)
     }
 
@@ -193,10 +199,26 @@ final class DeepSeekProvider: Provider {
     /// estimates that made the menu long and hard to read; they are dropped.
     /// Rows that are not routine — a wallet that cannot serve calls, a second
     /// currency — still appear, because hiding those would hide real money.
-    nonisolated static func rows(balance: BalanceResponse, preferredCurrency: String?, now: Date = Date()) -> [String] {
-        var rows: [String] = ["Balance: \(balance.display(preferring: preferredCurrency))"]
+    nonisolated static func rows(balance: BalanceResponse,
+                                 preferredCurrency: String?,
+                                 threshold: Decimal? = nil,
+                                 now: Date = Date()) -> [MenuRow] {
+        // A balance has no full mark to measure against, so it carries no bar;
+        // the low-balance threshold is what turns the number red instead.
+        let wallet = balance.preferred(preferredCurrency)
+        let isLow: Bool
+        if !balance.isAvailable {
+            isLow = true
+        } else if let threshold, threshold > 0, let wallet {
+            isLow = wallet.total < threshold
+        } else {
+            isLow = false
+        }
+        var rows: [MenuRow] = [.metric("Balance",
+                                       balance.display(preferring: preferredCurrency),
+                                       isWarning: isLow)]
 
-        if let wallet = balance.preferred(preferredCurrency), balance.isMultiCurrency {
+        if let wallet, balance.isMultiCurrency {
             // Wallets are shown side by side; they are never summed. An
             // unrecognized code falls back to itself, so two unknown currencies
             // do not collapse into one row.
@@ -206,15 +228,16 @@ final class DeepSeekProvider: Provider {
             }
             let shown = code(wallet.currency)
             for info in balance.balanceInfos where code(info.currency) != shown {
-                rows.append("Also: \(Money.format(info.total, currency: info.currency))")
+                rows.append(.metric("\(code(info.currency)) wallet",
+                                    Money.format(info.total, currency: info.currency)))
             }
         }
 
         if !balance.isAvailable {
-            rows.append("Account cannot serve API calls")
+            rows.append(.notice("Account cannot serve API calls"))
         }
 
-        rows.append(PeakSchedule.summary(at: now))
+        rows.append(.caption(PeakSchedule.summary(at: now)))
         return rows
     }
 }

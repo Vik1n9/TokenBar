@@ -18,19 +18,20 @@ enum Severity {
 
 /// One consistent reading from a provider, already formatted for display.
 ///
-/// Providers render their own numbers into strings: a percentage-and-countdown
-/// provider and a currency-balance provider have nothing useful in common at the
-/// data level, and forcing them into one numeric model only adds translation
-/// layers. The shell just draws what it is handed.
+/// Providers render their own numbers: a percentage-and-countdown provider and a
+/// currency-balance provider have nothing useful in common at the data level,
+/// and forcing them into one numeric model only adds translation layers. What
+/// they share is the *shape* of a line — a metric, a caption, a notice — which
+/// is what `MenuRow` carries, so the shell can draw all of them alike.
 struct ProviderSnapshot {
     /// Menu bar text that follows the glyph, e.g. `42% · 2d` or `¥110.00`.
     var barText: String
     var severity: Severity
     /// Read-only detail lines for the drop-down, in display order.
-    var rows: [String]
+    var rows: [MenuRow]
     var fetchedAt: Date
 
-    init(barText: String, severity: Severity = .normal, rows: [String] = [], fetchedAt: Date = Date()) {
+    init(barText: String, severity: Severity = .normal, rows: [MenuRow] = [], fetchedAt: Date = Date()) {
         self.barText = barText
         self.severity = severity
         self.rows = rows
