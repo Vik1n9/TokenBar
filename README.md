@@ -39,12 +39,6 @@ D  DeepSeek API
    Open Usage Page
 ```
 
-Those rows are drawn rather than written as menu text. macOS washes out the
-title of a disabled menu item however it is coloured, and every row here is
-information rather than a command, so the whole drop-down came out barely
-legible. Drawing each row as its own view keeps them unclickable at full
-contrast, and leaves room for the bar.
-
 ## Supported accounts
 
 | | Service | Credential | Shows |
