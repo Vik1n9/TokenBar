@@ -91,14 +91,6 @@ account does not hold, you get the real wallet prefixed with its ISO code
 
    Then open it normally. You can also right-click the app → **Open** → **Open**.
 
-### Coming from QwenTokenBar
-
-TokenBar is a different app with its own bundle identifier, so it has its own
-cookie store and preferences. **You will need to sign in to QwenCloud once
-more.** The standalone
-[QwenTokenBar](https://github.com/Vik1n9/QwenTokenBar) still works and is
-unaffected; run either, or both.
-
 ## Setup
 
 Open **Settings…** from any menu bar item.
