@@ -126,38 +126,6 @@ manual drag into `Applications`, exactly like the first install.
 Pre-releases and drafts are ignored. Turn the whole thing off, or check on
 demand, under **Settings → General → Updates**.
 
-## Build from source
-
-Xcode or the Xcode Command Line Tools are enough — there are no dependencies.
-
-```bash
-swift build -c release
-./scripts/build-app.sh          # produces dist/TokenBar.app
-./scripts/package-release.sh    # also produces the .dmg and .zip
-```
-
-Tests run as a self-check inside the binary, so no XCTest install is needed:
-
-```bash
-"$(swift build -c release --show-bin-path)/TokenBar" --self-check
-```
-
-### Releasing
-
-Releases are cut by tag. Bump `CFBundleShortVersionString` in
-`Resources/Info.plist`, then:
-
-```bash
-git tag v1.2.3 && git push origin v1.2.3
-```
-
-The `release` workflow builds the universal binary on a macOS runner, runs the
-self-check, packages the `.dmg` and `.zip`, and publishes a GitHub release with
-both attached. It refuses to publish when the tag and the bundle version
-disagree, because the in-app update check compares the two. Release notes come
-from `docs/releases/<tag>.md` when that file exists, and from
-`docs/releases/template.md` otherwise; checksums are appended automatically.
-
 ## Privacy
 
 - Credentials never leave your machine. The API key lives in the keychain; the
