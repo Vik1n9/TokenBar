@@ -311,10 +311,20 @@ enum SelfCheck {
     // MARK: - Menu rows
 
     /// The drop-down is deliberately short: what is left, and when it changes.
-    /// These pin that shape so a future row does not creep back in unnoticed.
+    /// These pin that shape — and each row's kind, since the kind is what the
+    /// menu draws: a metric with a bar reads differently from its caption.
     private static func checkMenuRows() {
         print("Menu rows")
         let now = Date(timeIntervalSince1970: 1_788_000_000)
+
+        func kind(_ row: MenuRow?) -> String {
+            switch row?.kind {
+            case .metric: return "metric"
+            case .caption: return "caption"
+            case .notice: return "notice"
+            case nil: return "nil"
+            }
+        }
 
         guard let bridge = try? JSONDecoder().decode(BridgeResult.self, from: Data(qwenPayload.utf8)) else {
             print("  FAIL qwen payload did not decode")
@@ -323,8 +333,21 @@ enum SelfCheck {
         }
         let qwenRows = QwenProvider.rows(PlanSnapshot(bridge: bridge, fetchedAt: now), now: now)
         expect("qwen row count", "\(qwenRows.count)", "2")
-        expect("qwen remaining row", qwenRows.first ?? "nil", "Left: 0%")
-        expect("qwen reset row", qwenRows.last ?? "nil", "Resets in 3d")
+        expect("qwen allowance row", qwenRows.first?.text ?? "nil", "7-day allowance: 0% left")
+        expect("qwen allowance is a metric", kind(qwenRows.first), "metric")
+        // The bar measures what is left, so an exhausted allowance draws empty.
+        expect("qwen bar fraction", "\(qwenRows.first?.fraction ?? -1)", "0.0")
+        expect("qwen exhausted warns", "\(qwenRows.first?.isWarning ?? false)", "true")
+        expect("qwen reset row", qwenRows.last?.text ?? "nil", "Resets in 3d")
+        expect("qwen reset is a caption", kind(qwenRows.last), "caption")
+
+        let half = try? JSONDecoder().decode(
+            BridgeResult.self,
+            from: Data(#"{"loggedIn":true,"usage":{"per1WeekResetTime":1,"per1WeekPercentage":0.5}}"#.utf8))
+        let halfRows = half.map { QwenProvider.rows(PlanSnapshot(bridge: $0, fetchedAt: now), now: now) } ?? []
+        expect("qwen half left", halfRows.first?.text ?? "nil", "7-day allowance: 50% left")
+        expect("qwen half bar", "\(halfRows.first?.fraction ?? -1)", "0.5")
+        expect("qwen half does not warn", "\(halfRows.first?.isWarning ?? true)", "false")
 
         guard let balance = try? JSONDecoder().decode(BalanceResponse.self, from: Data(balancePayload.utf8)) else {
             print("  FAIL balance payload did not decode")
@@ -335,8 +358,17 @@ enum SelfCheck {
         // returning at Monday 01:00 UTC, 38 hours out.
         let deepSeekRows = DeepSeekProvider.rows(balance: balance, preferredCurrency: nil, now: now)
         expect("deepseek row count", "\(deepSeekRows.count)", "2")
-        expect("deepseek balance row", deepSeekRows.first ?? "nil", "Balance: ¥110.00")
-        expect("deepseek band row", deepSeekRows.last ?? "nil", "Off-peak (50% off) · peak in 1d")
+        expect("deepseek balance row", deepSeekRows.first?.text ?? "nil", "Balance: ¥110.00")
+        // A balance has no full mark, so it never draws a bar.
+        expect("deepseek balance has no bar", deepSeekRows.first?.fraction.map { "\($0)" } ?? "nil", "nil")
+        expect("deepseek band row", deepSeekRows.last?.text ?? "nil", "Off-peak (50% off) · peak in 1d")
+        expect("deepseek band is a caption", kind(deepSeekRows.last), "caption")
+
+        // Below the threshold the number turns red; above it, it does not.
+        let low = DeepSeekProvider.rows(balance: balance, preferredCurrency: nil, threshold: Money.parse("200"), now: now)
+        expect("below threshold warns", "\(low.first?.isWarning ?? false)", "true")
+        let fine = DeepSeekProvider.rows(balance: balance, preferredCurrency: nil, threshold: Money.parse("10"), now: now)
+        expect("above threshold is calm", "\(fine.first?.isWarning ?? true)", "false")
 
         let unavailable = """
         {"is_available":false,"balance_infos":[
@@ -352,9 +384,18 @@ enum SelfCheck {
         // serve calls — those are not the routine rows the menu trimmed.
         let dualRows = DeepSeekProvider.rows(balance: dual, preferredCurrency: "USD", now: now)
         expect("dual row count", "\(dualRows.count)", "4")
-        expect("dual primary", dualRows[0], "Balance: $1.50")
-        expect("dual second wallet", dualRows[1], "Also: ¥70.16")
-        expect("dual unavailable", dualRows[2], "Account cannot serve API calls")
+        expect("dual primary", dualRows[0].text, "Balance: $1.50")
+        expect("unavailable warns", "\(dualRows[0].isWarning)", "true")
+        expect("dual second wallet", dualRows[1].text, "CNY wallet: ¥70.16")
+        expect("dual unavailable", dualRows[2].text, "Account cannot serve API calls")
+        expect("unavailable is a notice", kind(dualRows[2]), "notice")
+
+        print("Menu row text")
+        expect("metric text joins", MenuRow.metric("Balance", "$1.57").text, "Balance: $1.57")
+        expect("caption text is bare", MenuRow.caption("Resets in 2d").text, "Resets in 2d")
+        expect("row height with a bar",
+               "\(MenuCardRowView.height(for: .metric("A", "B", fraction: 0.5)))",
+               "\(MenuCardRowView.height(for: .metric("A", "B")) + MenuCard.barHeight + 6)")
     }
 
     // MARK: - Update versions

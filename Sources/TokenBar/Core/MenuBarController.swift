@@ -181,32 +181,32 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     private func buildSection(for session: ProviderSession, into menu: NSMenu) {
         let provider = session.provider
-        menu.addItem(header("\(provider.glyph)  \(provider.displayName)"))
+        menu.addItem(header(glyph: provider.glyph, name: provider.displayName))
 
         switch session.store.state {
         case .unknown:
-            menu.addItem(info("Loading…"))
+            menu.addItem(row(.caption("Loading…")))
         case .needsAuth:
             switch provider.authKind {
-            case .webSession: menu.addItem(info("Not signed in"))
-            case .apiKey: menu.addItem(info("No API key — add one in Settings"))
+            case .webSession: menu.addItem(row(.caption("Not signed in")))
+            case .apiKey: menu.addItem(row(.caption("No API key — add one in Settings")))
             }
         case .failed(let message):
-            menu.addItem(info("Last refresh failed: \(message)"))
+            menu.addItem(row(.notice("Last refresh failed: \(message)")))
             if let snapshot = session.store.snapshot {
-                snapshot.rows.forEach { menu.addItem(info($0)) }
+                snapshot.rows.forEach { menu.addItem(row($0)) }
                 // Only worth the line when the numbers above are known to be
                 // stale: it says how old they are.
-                menu.addItem(info("Updated \(Formatters.clock.string(from: snapshot.fetchedAt))"))
+                menu.addItem(row(.caption("Updated \(Formatters.clock.string(from: snapshot.fetchedAt))")))
             }
         case .ok:
-            session.store.snapshot?.rows.forEach { menu.addItem(info($0)) }
+            session.store.snapshot?.rows.forEach { menu.addItem(row($0)) }
         }
 
-        // Per-provider actions sit inside the provider's own section, indented
-        // so they read as belonging to it rather than to the app as a whole.
+        // Per-provider actions sit inside the provider's own section. They share
+        // the card's left margin rather than being indented under it: the header
+        // above already says whose they are.
         for item in provider.extraMenuItems() {
-            item.indentationLevel = 1
             menu.addItem(item)
         }
         if case .webSession = provider.authKind {
@@ -217,33 +217,28 @@ final class MenuBarController: NSObject, NSMenuDelegate {
                 item = action("Sign Out", #selector(signOutTapped))
             }
             item.representedObject = session
-            item.indentationLevel = 1
             menu.addItem(item)
         }
     }
 
-    private func header(_ text: String) -> NSMenuItem {
-        let item = NSMenuItem(title: text, action: nil, keyEquivalent: "")
+    private func header(glyph: String, name: String) -> NSMenuItem {
+        let item = NSMenuItem()
         item.isEnabled = false
-        item.attributedTitle = NSAttributedString(string: text, attributes: [
-            .font: NSFont.boldSystemFont(ofSize: NSFont.smallSystemFontSize),
-            .foregroundColor: NSColor.secondaryLabelColor
-        ])
+        item.view = MenuCardHeaderView(glyph: glyph, name: name)
         return item
     }
 
-    /// A read-only detail line. Disabled menu items are drawn washed out by
-    /// default, which left the whole drop-down barely legible; an explicit
-    /// colour on the attributed title keeps these rows at normal contrast while
-    /// they stay unclickable.
-    private func info(_ text: String) -> NSMenuItem {
-        let item = NSMenuItem(title: text, action: nil, keyEquivalent: "")
+    /// A read-only detail line, drawn as a view rather than as menu text.
+    ///
+    /// These rows are information, not commands, so they are disabled — and
+    /// AppKit draws a disabled item's title washed out no matter how the title
+    /// is attributed, which is what made the whole drop-down hard to read. A
+    /// custom view is drawn by us at the contrast we choose and still cannot be
+    /// clicked.
+    private func row(_ row: MenuRow) -> NSMenuItem {
+        let item = NSMenuItem()
         item.isEnabled = false
-        item.indentationLevel = 1
-        item.attributedTitle = NSAttributedString(string: text, attributes: [
-            .font: NSFont.menuFont(ofSize: 0),
-            .foregroundColor: NSColor.labelColor
-        ])
+        item.view = MenuCardRowView(row: row)
         return item
     }
 

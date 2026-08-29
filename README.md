@@ -22,22 +22,28 @@ Rotating rather than listing every account side by side keeps the menu bar
 footprint at one reading no matter how many accounts you add. The rotation holds
 still while the menu is open, so the title cannot change while you are reading.
 
-Click it and **every** account is shown at once, grouped under one heading each,
-with that account's own actions beneath it. The drop-down stays deliberately
-short — for each account, what is left and when that changes:
+Click it and **every** account is shown at once, one card each. The drop-down
+stays deliberately short — what is left, and when that changes:
 
 ```
 Q  QwenCloud Token Plan
-     Left: 42%
-     Resets in 2d
-     Open Console
-     Sign Out
-
+   7-day allowance              42% left
+   ▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░
+   Resets in 2d
+   Open Console
+   Sign Out
+───────────────────────────────────────
 D  DeepSeek API
-     Balance: ¥110.00
-     Off-peak (50% off) · peak in 4h
-     Open Usage Page
+   Balance                       ¥110.00
+   Off-peak (50% off) · peak in 4h
+   Open Usage Page
 ```
+
+Those rows are drawn rather than written as menu text. macOS washes out the
+title of a disabled menu item however it is coloured, and every row here is
+information rather than a command, so the whole drop-down came out barely
+legible. Drawing each row as its own view keeps them unclickable at full
+contrast, and leaves room for the bar.
 
 ## Supported accounts
 
