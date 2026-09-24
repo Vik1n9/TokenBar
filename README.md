@@ -14,7 +14,7 @@ One menu bar item, showing one account at a time and rotating every minute:
 Q 42% · 2d        →  a minute later  →        D ¥110.00
 ```
 
-That reads: 42% of the QwenCloud 7-day allowance left, resetting in 2 days; then
+That reads: 42% of the QwenCloud plan allowance left, resetting in 2 days; then
 ¥110.00 of DeepSeek API credit remaining. The reading turns red when that account
 is running low, and grey with a `⚠` when its last refresh failed.
 
@@ -27,7 +27,7 @@ stays deliberately short — what is left, and when that changes:
 
 ```
 Q  QwenCloud Token Plan
-   7-day allowance              42% left
+   Monthly allowance            42% left
    ▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░
    Resets in 2d
    Open Console
@@ -43,7 +43,7 @@ D  DeepSeek API
 
 | | Service | Credential | Shows |
 |---|---|---|---|
-| `Q` | QwenCloud Token Plan | console sign-in | remaining 7-day allowance, reset countdown |
+| `Q` | QwenCloud Token Plan | console sign-in | remaining allowance (monthly, weekly, … whichever window the plan uses), reset countdown |
 | `D` | DeepSeek API | API key | balance, peak/off-peak rate band |
 
 Adding another service is a folder under `Sources/TokenBar/Providers/` plus one

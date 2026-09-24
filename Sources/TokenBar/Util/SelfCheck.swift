@@ -10,9 +10,9 @@ enum SelfCheck {
     /// the checks pin the real contract rather than a guess.
     private static let qwenPayload = """
     {"loggedIn":true,
-     "usage":{"per1WeekResetTime":1788262920000,"per1WeekPercentage":1},
+     "usage":{"per1MonthPercentage":0,"per1MonthResetTime":1790870400000},
      "subscription":{"instanceCode":"sfm_tokenplansolo_public_intl-sg-x",
-                     "specCode":"standard","remainingDays":337,
+                     "specCode":"standard","remainingDays":311,
                      "startTime":1785547613000,"endTime":1817136000000,
                      "autoRenewFlag":false,"status":"VALID"}}
     """
@@ -74,10 +74,9 @@ enum SelfCheck {
         expect("specCode", live.subscription?.specCode ?? "nil", "standard")
 
         let snapshot = PlanSnapshot(bridge: live)
-        // per1WeekPercentage is the *used* share: 1 must render as 0% left,
-        // which is what the console page showed when this payload was captured.
-        expect("remaining %", "\(snapshot.remainingPercent ?? -1)", "0.0")
-        expect("remainingDays", "\(snapshot.remainingDays ?? -1)", "337")
+        expect("window", snapshot.binding?.label ?? "nil", "Monthly")
+        expect("remaining %", "\(snapshot.remainingPercent ?? -1)", "100.0")
+        expect("remainingDays", "\(snapshot.remainingDays ?? -1)", "311")
         expect("status", snapshot.status ?? "nil", "VALID")
         expect("autoRenew", "\(snapshot.autoRenew ?? true)", "false")
 
@@ -85,11 +84,28 @@ enum SelfCheck {
         resetFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
         resetFormatter.timeZone = TimeZone(secondsFromGMT: 8 * 3600)
         let resetText = snapshot.resetTime.map { resetFormatter.string(from: $0) } ?? "nil"
-        expect("reset time (UTC+8)", resetText, "2026-09-01 19:42:00")
+        expect("reset time (UTC+8)", resetText, "2026-10-02 00:00:00")
+
+        // per<N><Unit>Percentage is the *used* share: 1 must render as 0% left,
+        // which is what the console page showed for an exhausted weekly plan.
+        let weekly = decode(#"{"loggedIn":true,"usage":{"per1WeekResetTime":1788262920000,"per1WeekPercentage":1}}"#)
+            .map { PlanSnapshot(bridge: $0) }
+        expect("weekly window", weekly?.binding?.label ?? "nil", "7-day")
+        expect("weekly exhausted", "\(weekly?.remainingPercent ?? -1)", "0.0")
 
         let half = decode(#"{"loggedIn":true,"usage":{"per1WeekResetTime":1,"per1WeekPercentage":0.5}}"#)
             .map { PlanSnapshot(bridge: $0) }
         expect("half used -> half left", "\(half?.remainingPercent ?? -1)", "50.0")
+
+        // Two windows: the one with less left drives the bar.
+        let both = decode(#"{"loggedIn":true,"usage":{"per5HourPercentage":0.9,"per5HourResetTime":2,"per1MonthPercentage":0.2,"per1MonthResetTime":3}}"#)
+            .map { PlanSnapshot(bridge: $0) }
+        expect("window order", both?.windows.map(\.label).joined(separator: ",") ?? "nil", "5-hour,Monthly")
+        expect("binding window", both?.binding?.label ?? "nil", "5-hour")
+        expect("binding remaining", "\(both?.remainingPercent.map { ($0 * 10).rounded() / 10 } ?? -1)", "10.0")
+
+        let unknown = decode(#"{"loggedIn":true,"usage":{"foo":1,"perXWeekPercentage":1}}"#)
+        expect("unknown keys ignored", "\(unknown?.usage?.windows.count ?? -1)", "0")
         expect("logged out", "\(decode(#"{"loggedIn":false}"#)?.loggedIn ?? true)", "false")
         expect("bridge error", decode(#"{"loggedIn":true,"error":"gateway error"}"#)?.error ?? "nil", "gateway error")
     }
@@ -333,13 +349,21 @@ enum SelfCheck {
         }
         let qwenRows = QwenProvider.rows(PlanSnapshot(bridge: bridge, fetchedAt: now), now: now)
         expect("qwen row count", "\(qwenRows.count)", "2")
-        expect("qwen allowance row", qwenRows.first?.text ?? "nil", "7-day allowance: 0% left")
+        expect("qwen allowance row", qwenRows.first?.text ?? "nil", "Monthly allowance: 100% left")
         expect("qwen allowance is a metric", kind(qwenRows.first), "metric")
-        // The bar measures what is left, so an exhausted allowance draws empty.
-        expect("qwen bar fraction", "\(qwenRows.first?.fraction ?? -1)", "0.0")
-        expect("qwen exhausted warns", "\(qwenRows.first?.isWarning ?? false)", "true")
-        expect("qwen reset row", qwenRows.last?.text ?? "nil", "Resets in 3d")
+        expect("qwen full bar", "\(qwenRows.first?.fraction ?? -1)", "1.0")
+        expect("qwen reset row", qwenRows.last?.text ?? "nil", "Resets in 33d")
         expect("qwen reset is a caption", kind(qwenRows.last), "caption")
+
+        let exhausted = try? JSONDecoder().decode(
+            BridgeResult.self,
+            from: Data(#"{"loggedIn":true,"usage":{"per1WeekResetTime":1788262920000,"per1WeekPercentage":1}}"#.utf8))
+        let exhaustedRows = exhausted.map { QwenProvider.rows(PlanSnapshot(bridge: $0, fetchedAt: now), now: now) } ?? []
+        expect("qwen weekly row", exhaustedRows.first?.text ?? "nil", "7-day allowance: 0% left")
+        // The bar measures what is left, so an exhausted allowance draws empty.
+        expect("qwen bar fraction", "\(exhaustedRows.first?.fraction ?? -1)", "0.0")
+        expect("qwen exhausted warns", "\(exhaustedRows.first?.isWarning ?? false)", "true")
+        expect("qwen weekly reset row", exhaustedRows.last?.text ?? "nil", "Resets in 3d")
 
         let half = try? JSONDecoder().decode(
             BridgeResult.self,
