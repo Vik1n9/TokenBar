@@ -17,6 +17,10 @@ final class QwenProvider: Provider {
 
     private let session = QwenSession()
 
+    /// The last successful reading, kept for the status export. Display reads the
+    /// fresh snapshot `fetch()` returns; this is only what another program reads.
+    private(set) var latestStatus: QwenStatus?
+
     /// Set by the shell: opens the login window. The provider does not own any
     /// window itself, so Settings and the menu can both trigger the same flow.
     var onSignInRequested: (() -> Void)?
@@ -29,10 +33,18 @@ final class QwenProvider: Provider {
         if let error = result.error { throw SessionError.bridgeFailed(error) }
 
         let plan = PlanSnapshot(bridge: result)
+        latestStatus = QwenStatus(plan: plan)
         return ProviderSnapshot(barText: barText(plan),
                                 severity: (plan.remainingPercent ?? 100) < 10 ? .warning : .normal,
                                 rows: Self.rows(plan, now: plan.fetchedAt),
                                 fetchedAt: plan.fetchedAt)
+    }
+
+    /// A reading with no windows carries nothing worth exporting, so it is left
+    /// out and the previous numbers stay in the file.
+    var statusValue: ProviderStatus? {
+        guard let status = latestStatus, !status.windows.isEmpty else { return nil }
+        return .qwen(status)
     }
 
     func signOut() async {

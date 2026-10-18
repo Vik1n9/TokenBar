@@ -26,6 +26,10 @@ final class DeepSeekProvider: Provider {
     private let ledger = BalanceLedger()
     private let notifier = Notifier()
 
+    /// The last successful balance reading, kept for the status export. Display
+    /// reads the fresh response `fetch()` returns.
+    private(set) var latestBalance: (response: BalanceResponse, at: Date)?
+
     /// Set by the shell: asks for an immediate refresh after a settings change.
     var onRefreshRequested: (() -> Void)?
 
@@ -79,6 +83,7 @@ final class DeepSeekProvider: Provider {
         let balance = try await client.fetchBalance(apiKey: key)
         let now = Date()
         ledger.record(balance, at: now)
+        latestBalance = (balance, now)
 
         guard let wallet = balance.preferred(preferredCurrency) else {
             return ProviderSnapshot(barText: "—",
@@ -127,6 +132,23 @@ final class DeepSeekProvider: Provider {
 
     func signOut() async {
         keychain.delete()
+    }
+
+    /// Every wallet the account holds, keyed by ISO code. A wallet whose currency
+    /// is unrecognized falls back to its own uppercased code, so two unknown
+    /// currencies stay two entries.
+    var statusValue: ProviderStatus? {
+        guard let latest = latestBalance else { return nil }
+        var wallets: [String: DeepSeekWalletStatus] = [:]
+        for info in latest.response.balanceInfos {
+            let iso = Money.normalize(info.currency)
+            let code = iso.isEmpty ? info.currency.uppercased() : iso
+            wallets[code] = DeepSeekWalletStatus(total: info.total,
+                                                 toppedUp: info.toppedUp,
+                                                 granted: info.granted,
+                                                 at: latest.at)
+        }
+        return wallets.isEmpty ? nil : .deepseek(wallets)
     }
 
     /// Validates a candidate key against the live endpoint without storing it,

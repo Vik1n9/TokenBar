@@ -39,6 +39,17 @@ struct ProviderSnapshot {
     }
 }
 
+/// A provider's latest reading in the shape the status export stores it.
+///
+/// Unlike `ProviderSnapshot`, which is formatted for display, this carries the
+/// raw numbers so another program can read them. It deliberately has no place
+/// for a credential, a cookie, a session token or an account identifier: only
+/// what the export format needs.
+enum ProviderStatus {
+    case qwen(QwenStatus)
+    case deepseek([String: DeepSeekWalletStatus])
+}
+
 /// A monitored service. Adding a new one means adding a type here and a line in
 /// `ProviderRegistry` — nothing in the shell changes.
 @MainActor
@@ -60,10 +71,19 @@ protocol Provider: AnyObject {
     func extraMenuItems() -> [NSMenuItem]
     /// The provider's page in the Settings window.
     func settingsPane() -> NSView
+
+    /// The last successful reading, for the status export. Kept separate from
+    /// `fetch()`'s return value because the export needs the raw numbers that
+    /// `ProviderSnapshot` has already formatted away. Nil when there is nothing
+    /// to export yet.
+    var statusValue: ProviderStatus? { get }
 }
 
 extension Provider {
     func extraMenuItems() -> [NSMenuItem] { [] }
+
+    /// Providers that contribute nothing to the status file inherit nil.
+    var statusValue: ProviderStatus? { nil }
 
     /// Per-provider "Show in menu bar" toggle, defaulting to on.
     var isVisible: Bool {

@@ -21,12 +21,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var updateChecker: UpdateChecker!
     private var settingsWindow: SettingsWindowController!
     private var loginWindow: LoginWindowController!
+    private var statusExporter: StatusExporter!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         providers = ProviderRegistry.makeAll()
+        statusExporter = StatusExporter()
         sessions = providers.map { ProviderSession(provider: $0) }
         sessions.forEach { session in
             session.onChange = { [weak self] in self?.menuBar?.render() }
+            // Every successful reading is folded into the exported status file;
+            // the export itself decides whether the user wants it written.
+            let provider = session.provider
+            session.onSuccess = { [weak self] in self?.statusExporter?.capture(provider) }
         }
 
         refreshService = RefreshService { [weak self] in self?.refreshAll() }

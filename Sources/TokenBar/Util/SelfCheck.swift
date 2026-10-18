@@ -39,6 +39,7 @@ enum SelfCheck {
         checkMenuRows()
         checkVersions()
         checkFormatters()
+        checkStatusExport()
 
         print("")
         if failures.isEmpty {
@@ -459,5 +460,78 @@ enum SelfCheck {
         expect("percent 42", Formatters.percent(42), "42%")
         expect("percent 42.35", Formatters.percent(42.35), "42.4%")
         expect("api date is UTC", Formatters.apiDate.string(from: now), "2026-08-29")
+    }
+
+    // MARK: - Status export
+
+    /// The status file is what other programs read, so its shape and its
+    /// discretion about credentials are pinned here. The write goes to a scratch
+    /// directory; the real Application Support folder is never touched.
+    private static func checkStatusExport() {
+        print("Status export")
+        let at = Date(timeIntervalSince1970: 1_788_000_000)
+
+        let payload = #"{"loggedIn":true,"usage":{"per5HourPercentage":0.1,"per5HourResetTime":1790000000000,"per1MonthPercentage":0.58,"per1MonthResetTime":1790870400000},"subscription":{"specCode":"standard","instanceCode":"sfm_tokenplansolo_public_intl-sg-x","status":"VALID"}}"#
+        guard let bridge = try? JSONDecoder().decode(BridgeResult.self, from: Data(payload.utf8)) else {
+            print("  FAIL status fixture did not decode")
+            failures.append("status fixture")
+            return
+        }
+        let qwen = QwenStatus(plan: PlanSnapshot(bridge: bridge, fetchedAt: at))
+        expect("window count", "\(qwen.windows.count)", "2")
+        expect("windows shortest first", qwen.windows.map(\.label).joined(separator: ","), "5-hour,Monthly")
+        // The tighter of the two windows (58% used vs 10% used) drives the
+        // account figure: 42% left, not 90%.
+        expect("tightest window wins", "\(qwen.percentLeft ?? -1)", "42.0")
+        expect("per-window percent", "\(qwen.windows.first?.percentLeft ?? -1)", "90.0")
+        expect("window reset carried", "\(qwen.windows.first?.resetsAt != nil)", "true")
+        let bare = QwenWindowStatus(window: UsageWindow(count: 1, unit: .Month,
+                                                        usedFraction: nil, resetTime: nil))
+        expect("unknown window percent", bare.percentLeft.map { "\($0)" } ?? "nil", "nil")
+
+        var file = StatusFile(updatedAt: at)
+        file.qwen = qwen
+        file.deepseek = [
+            "USD": DeepSeekWalletStatus(total: Money.parse("17.13"), toppedUp: Money.parse("16.8"),
+                                        granted: Money.parse("0.33"), at: at),
+            "CNY": DeepSeekWalletStatus(total: Money.parse("5.11"), toppedUp: .zero,
+                                        granted: Money.parse("5.11"), at: at)
+        ]
+
+        guard let data = try? StatusFile.encode(file), let text = String(data: data, encoding: .utf8) else {
+            print("  FAIL status encode")
+            failures.append("status encode")
+            return
+        }
+        print(text.split(separator: "\n").map { "  \($0)" }.joined(separator: "\n"))
+
+        // No credential or identifier may appear. The fixture's own identifiers
+        // are in the payload, so this fails if the export ever copies them.
+        let lowered = text.lowercased()
+        for word in ["key", "token", "cookie", "email", "instancecode", "speccode", "sfm_", "valid"] {
+            expect("no \(word)", lowered.contains(word) ? "found" : "absent", "absent")
+        }
+        expect("version", text.range(of: #""version"\s*:\s*1"#, options: .regularExpression) != nil ? "1" : "missing", "1")
+        let isoPattern = #"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:\d{2})"#
+        expect("ISO 8601 with offset",
+               text.range(of: isoPattern, options: .regularExpression) != nil ? "present" : "missing",
+               "present")
+
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("tokenbar-selfcheck-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let store = StatusFileStore(directory: directory)
+        do {
+            try store.write(file)
+        } catch {
+            print("  FAIL status write: \(error)")
+            failures.append("status write")
+            return
+        }
+        let attributes = try? FileManager.default.attributesOfItem(atPath: store.url.path)
+        let mode = (attributes?[.posixPermissions] as? NSNumber)?.intValue ?? -1
+        expect("file mode 0600", String(mode, radix: 8), "600")
+        expect("reload", store.load() == file ? "equal" : "different", "equal")
     }
 }
