@@ -112,6 +112,53 @@ manual drag into `Applications`, exactly like the first install.
 Pre-releases and drafts are ignored. Turn the whole thing off, or check on
 demand, under **Settings → General → Updates**.
 
+## Status export
+
+Another program on the same Mac — a script that checks your remaining allowance
+before it dispatches, say — can read what TokenBar last saw instead of asking the
+APIs itself. After every **successful** refresh the app writes a small JSON file:
+
+```
+~/Library/Application Support/TokenBar/status.json
+```
+
+```json
+{
+  "version": 1,
+  "updatedAt": "2026-10-19T12:00:00+08:00",
+  "qwen": {
+    "percentLeft": 42.0,
+    "windows": [
+      { "label": "Monthly", "hours": 720, "percentLeft": 42.0, "resetsAt": "2026-10-21T00:00:00+08:00" }
+    ],
+    "at": "2026-10-19T12:00:00+08:00"
+  },
+  "deepseek": {
+    "USD": { "total": 17.13, "toppedUp": 16.8, "granted": 0.33, "at": "2026-10-19T12:00:00+08:00" },
+    "CNY": { "total": 5.11, "toppedUp": 0, "granted": 5.11, "at": "2026-10-19T12:00:00+08:00" }
+  }
+}
+```
+
+- `updatedAt` is when the file was written. Each account's `at` is when its
+  numbers were actually read, so an old value says so.
+- `qwen.percentLeft` is the smallest percentage left across that account's
+  windows — the allowance that will stop requests first. `windows` lists every
+  window the plan reports.
+- `deepseek` holds one object per wallet, keyed by ISO currency. Wallets are
+  never converted into each other.
+- If a refresh fails, that account's previous numbers and `at` are kept rather
+  than overwritten with zero. An account with no reading at all is left out of
+  the file entirely.
+
+The file holds numbers, ISO currency codes and timestamps only. No API key,
+cookie, session token, account name, email or any other identifier is ever
+written, and the file is created with `0600` permissions so only your user can
+read it.
+
+Turn it off under **Settings → General → Export status file for other apps to
+read** (on by default). Turning it off deletes the file.
+
 ## Privacy
 
 - Credentials never leave your machine. The API key lives in the keychain; the
@@ -124,6 +171,9 @@ demand, under **Settings → General → Updates**.
 - The spend ledger is a plain JSON file at
   `~/Library/Application Support/TokenBar/deepseek-ledger.json`. It holds
   timestamps and amounts only.
+- The status file at `~/Library/Application Support/TokenBar/status.json` is the
+  same kind of thing: numbers and timestamps, readable only by your user. It can
+  be turned off, which deletes it.
 
 ## Trademarks and disclaimer
 

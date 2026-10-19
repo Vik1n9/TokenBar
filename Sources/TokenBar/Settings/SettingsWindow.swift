@@ -10,6 +10,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private var updateCheckbox: NSButton?
     private var updateStatusLabel: NSTextField?
     private var statusLabel: NSTextField?
+    private var exportCheckbox: NSButton?
     private var visibilityChecks: [NSButton] = []
 
     private let refreshService: RefreshService
@@ -42,14 +43,14 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             return
         }
 
-        let tabs = NSTabView(frame: NSRect(x: 0, y: 0, width: 420, height: 360))
+        let tabs = NSTabView(frame: NSRect(x: 0, y: 0, width: 420, height: 400))
         tabs.addTabViewItem(generalTab())
         for provider in providers {
             let item = NSTabViewItem(identifier: provider.id)
             item.label = provider.displayName
-            let container = NSView(frame: NSRect(x: 0, y: 0, width: 396, height: 300))
+            let container = NSView(frame: NSRect(x: 0, y: 0, width: 396, height: 340))
             let pane = provider.settingsPane()
-            pane.frame = NSRect(x: 16, y: 84, width: 380, height: 200)
+            pane.frame = NSRect(x: 16, y: 124, width: 380, height: 200)
             // Panes are laid out from a fixed size; pin them to the top so the
             // taller General tab does not leave a gap above them.
             pane.autoresizingMask = [.width, .minYMargin]
@@ -79,21 +80,29 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         let item = NSTabViewItem(identifier: "general")
         item.label = "General"
 
-        let content = NSView(frame: NSRect(x: 0, y: 0, width: 396, height: 300))
+        let content = NSView(frame: NSRect(x: 0, y: 0, width: 396, height: 340))
 
-        let intervalLabel = makeLabel("Refresh every", frame: NSRect(x: 24, y: 256, width: 110, height: 20))
-        let popUp = NSPopUpButton(frame: NSRect(x: 140, y: 251, width: 120, height: 26), pullsDown: false)
+        let intervalLabel = makeLabel("Refresh every", frame: NSRect(x: 24, y: 296, width: 110, height: 20))
+        let popUp = NSPopUpButton(frame: NSRect(x: 140, y: 291, width: 120, height: 26), pullsDown: false)
         popUp.addItems(withTitles: RefreshService.availableIntervals.map { "\($0) min" })
         popUp.target = self
         popUp.action = #selector(intervalChanged(_:))
 
         let checkbox = NSButton(checkboxWithTitle: "Launch at login", target: self, action: #selector(launchToggled(_:)))
-        checkbox.frame = NSRect(x: 22, y: 220, width: 200, height: 22)
+        checkbox.frame = NSRect(x: 22, y: 260, width: 200, height: 22)
 
-        let showLabel = makeLabel("Show in menu bar", frame: NSRect(x: 24, y: 190, width: 160, height: 20))
+        // Other programs on this Mac can read the last reading from the status
+        // file; the toggle is here because it is a privacy choice, not a
+        // per-provider one.
+        let export = NSButton(checkboxWithTitle: "Export status file for other apps to read",
+                              target: self,
+                              action: #selector(exportToggled(_:)))
+        export.frame = NSRect(x: 22, y: 230, width: 340, height: 22)
+
+        let showLabel = makeLabel("Show in menu bar", frame: NSRect(x: 24, y: 200, width: 160, height: 20))
         showLabel.textColor = .secondaryLabelColor
 
-        var y: CGFloat = 166
+        var y: CGFloat = 176
         visibilityChecks = providers.map { provider in
             let box = NSButton(checkboxWithTitle: "\(provider.glyph)  \(provider.displayName)",
                                target: self,
@@ -106,24 +115,24 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
         // Updates: the app only ever tells the user a release exists. Nothing
         // is downloaded or installed without them asking for it.
-        let updatesLabel = makeLabel("Updates", frame: NSRect(x: 24, y: 118, width: 160, height: 20))
+        let updatesLabel = makeLabel("Updates", frame: NSRect(x: 24, y: 128, width: 160, height: 20))
         updatesLabel.textColor = .secondaryLabelColor
 
         let updates = NSButton(checkboxWithTitle: "Check for new versions automatically",
                                target: self,
                                action: #selector(updateCheckToggled(_:)))
-        updates.frame = NSRect(x: 22, y: 94, width: 300, height: 22)
+        updates.frame = NSRect(x: 22, y: 104, width: 300, height: 22)
 
         let checkNow = NSButton(title: "Check Now", target: self, action: #selector(checkForUpdatesTapped))
         checkNow.bezelStyle = .rounded
-        checkNow.frame = NSRect(x: 22, y: 62, width: 110, height: 26)
+        checkNow.frame = NSRect(x: 22, y: 72, width: 110, height: 26)
 
-        let updateStatus = makeLabel("", frame: NSRect(x: 140, y: 66, width: 232, height: 20))
+        let updateStatus = makeLabel("", frame: NSRect(x: 140, y: 76, width: 232, height: 20))
         updateStatus.textColor = .secondaryLabelColor
         updateStatus.font = .systemFont(ofSize: 11)
         updateStatus.lineBreakMode = .byTruncatingTail
 
-        let status = makeLabel("", frame: NSRect(x: 24, y: 40, width: 348, height: 20))
+        let status = makeLabel("", frame: NSRect(x: 24, y: 50, width: 348, height: 20))
         status.textColor = .secondaryLabelColor
         status.font = .systemFont(ofSize: 11)
 
@@ -136,12 +145,13 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         disclaimer.font = .systemFont(ofSize: 10)
         disclaimer.isSelectable = false
 
-        ([intervalLabel, popUp, checkbox, showLabel, updatesLabel, updates, checkNow,
+        ([intervalLabel, popUp, checkbox, export, showLabel, updatesLabel, updates, checkNow,
           updateStatus, status, disclaimer] as [NSView] + visibilityChecks)
             .forEach { content.addSubview($0) }
 
         intervalPopUp = popUp
         launchCheckbox = checkbox
+        exportCheckbox = export
         updateCheckbox = updates
         updateStatusLabel = updateStatus
         statusLabel = status
@@ -161,6 +171,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             intervalPopUp?.selectItem(at: index)
         }
         launchCheckbox?.state = LoginItemManager.isEnabled ? .on : .off
+        exportCheckbox?.state = StatusFileStore.isEnabled ? .on : .off
         updateCheckbox?.state = updateChecker.isEnabled ? .on : .off
         syncUpdateStatus()
         for box in visibilityChecks {
@@ -204,6 +215,10 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         syncUpdateStatus()
     }
 
+    @objc private func exportToggled(_ sender: NSButton) {
+        StatusFileStore.isEnabled = sender.state == .on
+    }
+
     @objc private func visibilityToggled(_ sender: NSButton) {
         guard let id = sender.identifier?.rawValue,
               let provider = providers.first(where: { $0.id == id }) else { return }
@@ -225,6 +240,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         updateCheckbox = nil
         updateStatusLabel = nil
         statusLabel = nil
+        exportCheckbox = nil
         visibilityChecks = []
     }
 }

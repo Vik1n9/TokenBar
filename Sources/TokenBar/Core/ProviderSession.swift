@@ -18,6 +18,11 @@ final class ProviderSession {
         set { store.onChange = newValue }
     }
 
+    /// Fired after a successful reading, for side effects that need fresh data
+    /// (the status export). Failures do not fire it, so an account that failed
+    /// keeps whatever it exported last time.
+    var onSuccess: (() -> Void)?
+
     /// Coalesces refreshes: a new request replaces one still in flight.
     func refresh() {
         refreshTask?.cancel()
@@ -30,6 +35,7 @@ final class ProviderSession {
                 let snapshot = try await provider.fetch()
                 if Task.isCancelled { return }
                 store.apply(snapshot)
+                onSuccess?()
             } catch is CancellationError {
                 return
             } catch ProviderError.needsAuth {

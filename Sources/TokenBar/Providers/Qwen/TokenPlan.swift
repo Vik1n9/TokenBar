@@ -142,3 +142,68 @@ struct PlanSnapshot {
         return Date(timeIntervalSince1970: millis / 1000)
     }
 }
+
+/// One quota window as the status export stores it: a label, its rough length
+/// and the two numbers another program needs. Nothing about the plan's tier,
+/// instance or account travels with it.
+///
+/// The optionals encode as explicit `null` rather than being dropped, so a
+/// reader can tell "the plan did not report this" from "the field is missing".
+struct QwenWindowStatus: Codable, Equatable {
+    let label: String
+    let hours: Int
+    let percentLeft: Double?
+    let resetsAt: Date?
+
+    init(window: UsageWindow) {
+        label = window.label
+        hours = window.hours
+        percentLeft = Self.rounded(PlanSnapshot.remainingPercent(window))
+        resetsAt = PlanSnapshot.resetDate(window)
+    }
+
+    /// The UI shows one decimal; the file keeps the same precision so the two
+    /// never disagree and binary-float noise never reaches a reader.
+    static func rounded(_ percent: Double?) -> Double? {
+        percent.map { ($0 * 10).rounded() / 10 }
+    }
+
+    enum CodingKeys: String, CodingKey { case label, hours, percentLeft, resetsAt }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(label, forKey: .label)
+        try container.encode(hours, forKey: .hours)
+        try container.encode(percentLeft, forKey: .percentLeft)
+        try container.encode(resetsAt, forKey: .resetsAt)
+    }
+}
+
+/// The Token Plan side of the status file.
+struct QwenStatus: Codable, Equatable {
+    /// The tightest allowance, i.e. the smallest remaining percentage across the
+    /// windows — the one that will stop requests first. Nil when no window
+    /// reported a percentage.
+    let percentLeft: Double?
+    let windows: [QwenWindowStatus]
+    /// When this reading was taken, not when the file was written.
+    let at: Date
+
+    init(plan: PlanSnapshot) {
+        windows = plan.windows.map(QwenWindowStatus.init(window:))
+        // The tightest window, taken from the rounded per-window values so the
+        // account figure is always one of them, never a differently rounded
+        // recomputation.
+        percentLeft = windows.compactMap(\.percentLeft).min()
+        at = plan.fetchedAt
+    }
+
+    enum CodingKeys: String, CodingKey { case percentLeft, windows, at }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(percentLeft, forKey: .percentLeft)
+        try container.encode(windows, forKey: .windows)
+        try container.encode(at, forKey: .at)
+    }
+}

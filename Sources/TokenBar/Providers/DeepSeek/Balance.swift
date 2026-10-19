@@ -88,6 +88,16 @@ enum Money {
     }
 }
 
+/// One wallet's numbers as the status export stores them: the three amounts and
+/// when they were read. The currency is the key beside this object, so no
+/// identity beyond the ISO code travels with it.
+struct DeepSeekWalletStatus: Codable, Equatable {
+    let total: Decimal
+    let toppedUp: Decimal
+    let granted: Decimal
+    let at: Date
+}
+
 extension BalanceResponse {
     /// Distinct ISO currencies present in the wallet, in stable order.
     var currencies: [String] {
